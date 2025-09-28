@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "276863222799",
+    "project_id": "project-hecate-cadence",
+    "storage_bucket": "project-hecate-cadence.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:276863222799:android:39ce6f0481e31d22320f7a",
+        "android_client_info": {
+          "package_name": "com.example.hecate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQNWAmPrhYsodFsk0PHsiEI5Rwe7GzcAo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
