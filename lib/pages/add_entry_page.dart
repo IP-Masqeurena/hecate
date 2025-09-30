@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hecate/services/firebase_service.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +12,6 @@ class AddEntryPage extends StatefulWidget {
 
 class _AddEntryPageState extends State<AddEntryPage> {
   DateTime selectedDate = DateTime.now();
-  BleedStatus selectedStatus = BleedStatus.start;
   DateTime? endDate;
   bool _submitting = false;
 
@@ -24,33 +22,20 @@ class _AddEntryPageState extends State<AddEntryPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (result != null) setState(() { selectedDate = result; });
+    if (result != null && mounted) setState(() => selectedDate = result);
   }
 
   void _submit() async {
     final fs = Provider.of<FirestoreService>(context, listen: false);
-    // Validation: 'still' only possible if previous entry was start or still
-    if (selectedStatus == BleedStatus.still) {
-      // fetch most recent entry to check
-      final snap = await fs.periodStream().first;
-      if (snap.isEmpty) {
-        _showError('Cannot mark "Still bleeding" without a previous Start/Still record.');
-        return;
-      }
-      final last = snap.first; // already ordered desc in service
-      if (!(last.status == BleedStatus.start || last.status == BleedStatus.still)) {
-        _showError('Cannot mark "Still bleeding" unless previous record was Start or Still.');
-        return;
-      }
-    }
 
     final entry = PeriodEntry(
       startDate: selectedDate,
       endDate: endDate ?? selectedDate,
-      status: selectedStatus,
+      type: 'menstruation',
     );
 
-    setState(() { _submitting = true; });
+    if (!mounted) return;
+    setState(() => _submitting = true);
 
     try {
       await fs.addOrUpdateEntry(entry);
@@ -68,7 +53,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
         _showError('Failed to save: $ex');
       }
     } finally {
-      if (mounted) setState(() { _submitting = false; });
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -92,7 +77,6 @@ class _AddEntryPageState extends State<AddEntryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final statuses = ['Start bleeding', 'Still bleeding', 'Stop bleeding'];
     return Scaffold(
       appBar: AppBar(title: const Text('Add entry')),
       body: Padding(
@@ -104,13 +88,11 @@ class _AddEntryPageState extends State<AddEntryPage> {
             trailing: IconButton(icon: const Icon(Icons.calendar_today), onPressed: _pickDate),
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            height: 120,
-            child: CupertinoPicker.builder(
-              itemExtent: 32,
-              onSelectedItemChanged: (i) => setState(() => selectedStatus = BleedStatus.values[i]),
-              childCount: statuses.length,
-              itemBuilder: (context, i) => Center(child: Text(statuses[i])),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'This entry will be recorded as "Menstruation".',
+              style: TextStyle(fontSize: 14),
             ),
           ),
           const SizedBox(height: 8),
@@ -122,11 +104,13 @@ class _AddEntryPageState extends State<AddEntryPage> {
                 icon: const Icon(Icons.calendar_today),
                 onPressed: () async {
                   final d = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                  if (d != null) setState(() => endDate = d);
+                  if (d != null && mounted) setState(() => endDate = d);
                 },
               ),
               if (endDate != null)
-                IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => endDate = null)),
+                IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                  if (mounted) setState(() => endDate = null);
+                }),
             ]),
           ),
           const SizedBox(height: 16),
