@@ -33,58 +33,98 @@ class _PeriodCalendarState extends State<PeriodCalendar> {
   }
 
   void _buildEvents() {
-    // Clear
-    events = {};
-    final entries = widget.entries;
-    // Add actual recorded days
-    for (final e in entries) {
-      DateTime d = DateTime(e.startDate.year, e.startDate.month, e.startDate.day);
-      final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
-      for (; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
-        _addEvent(d, 'recorded');
-      }
+  events = {};
+  final entries = widget.entries;
+
+  // 1) Mark recorded days
+  for (final e in entries) {
+    DateTime d = DateTime(e.startDate.year, e.startDate.month, e.startDate.day);
+    final end = DateTime(e.endDate.year, e.endDate.month, e.endDate.day);
+    for (; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      _addEvent(d, 'recorded');
     }
-
-    // Prediction algorithm: compute avg cycle length (days between starts),
-    // and avg period length. Use last N entries (6) if available.
-    if (entries.length >= 1) {
-      final starts = entries.map((e) => e.startDate).toList().reversed.toList(); // chronological oldest->newest
-      if (starts.length >= 2) {
-        final diffs = <int>[];
-        for (int i = 1; i < starts.length; i++) {
-          diffs.add(starts[i].difference(starts[i - 1]).inDays);
-        }
-        final avgCycle = (diffs.reduce((a, b) => a + b) / diffs.length).round();
-        final periodLens = entries.map((e) => e.endDate.difference(e.startDate).inDays + 1).toList();
-        final avgPeriod = (periodLens.reduce((a, b) => a + b) / periodLens.length).round();
-
-        final lastStart = starts.last;
-        // predict next 3 starts
-        for (int i = 1; i <= 3; i++) {
-          final predictedStart = lastStart.add(Duration(days: avgCycle * i));
-          for (int d = 0; d < avgPeriod; d++) {
-            final dt = DateTime(predictedStart.year, predictedStart.month, predictedStart.day).add(Duration(days: d));
-            // don't override actual recorded days; but keep predicted tag
-            if (!_hasRecorded(dt)) _addEvent(dt, 'predicted');
-          }
-        }
-      } else {
-        // only 1 start recorded, predict using a conservative default cycle (28) and period length 5
-        final lastStart = starts.last;
-        final avgCycle = 28;
-        final avgPeriod = 5;
-        for (int i = 1; i <= 3; i++) {
-          final predictedStart = lastStart.add(Duration(days: avgCycle * i));
-          for (int d = 0; d < avgPeriod; d++) {
-            final dt = DateTime(predictedStart.year, predictedStart.month, predictedStart.day).add(Duration(days: d));
-            if (!_hasRecorded(dt)) _addEvent(dt, 'predicted');
-          }
-        }
-      }
-    }
-
-    setState(() {});
   }
+
+  if (entries.isEmpty) {
+    // nothing to predict
+    if (mounted) setState(() {});
+    return;
+  }
+
+  // Build chronological list of starts (oldest -> newest)
+  final starts = entries
+      .map((e) => DateTime(e.startDate.year, e.startDate.month, e.startDate.day))
+      .toList()
+      .reversed
+      .toList();
+
+  debugPrint('PeriodCalendar DEBUG: starts (oldest->newest): $starts');
+
+  if (starts.length >= 2) {
+    // Use up to the last N starts to compute cycle diffs
+    const int N = 6;
+    final recent = starts.length > N ? starts.sublist(starts.length - N) : starts;
+
+    final diffs = <int>[];
+    for (int i = 1; i < recent.length; i++) {
+      diffs.add(recent[i].difference(recent[i - 1]).inDays);
+    }
+
+    debugPrint('PeriodCalendar DEBUG: raw diffs (last $N cycles): $diffs');
+
+    // Filter out obvious outliers (cycles outside plausible range)
+    final filtered = diffs.where((d) => d >= 21 && d <= 45).toList();
+    final useDiffs = filtered.isNotEmpty ? filtered : diffs;
+
+    debugPrint('PeriodCalendar DEBUG: useDiffs after filtering: $useDiffs');
+
+    int median(List<int> arr) {
+      final s = List<int>.from(arr)..sort();
+      final m = s.length ~/ 2;
+      if (s.isEmpty) return 28;
+      return s.length.isOdd ? s[m] : ((s[m - 1] + s[m]) / 2).round();
+    }
+
+    final avgCycle = useDiffs.isEmpty ? 28 : median(useDiffs);
+
+    // period length (days) median
+    final periodLens = entries.map((e) => e.endDate.difference(e.startDate).inDays + 1).toList();
+    final avgPeriod = periodLens.isEmpty ? 5 : median(periodLens);
+
+    debugPrint('PeriodCalendar DEBUG: avgCycle=$avgCycle, avgPeriod=$avgPeriod');
+
+    // Iteratively compute predictions starting from last actual start
+    DateTime base = starts.last; // most recent actual start
+    final predictedStarts = <DateTime>[];
+    for (int i = 1; i <= 3; i++) {
+      base = base.add(Duration(days: avgCycle)); // chain from previous predicted (iterative)
+      predictedStarts.add(base);
+      // mark avgPeriod days from this predicted start
+      for (int d = 0; d < avgPeriod; d++) {
+        final dt = DateTime(base.year, base.month, base.day).add(Duration(days: d));
+        if (!_hasRecorded(dt)) _addEvent(dt, 'predicted');
+      }
+    }
+
+    debugPrint('PeriodCalendar DEBUG: predictedStarts = $predictedStarts');
+  } else {
+    // Only one start available — fallback defaults
+    final lastStart = starts.last;
+    final avgCycle = 28;
+    final avgPeriod = 5;
+    debugPrint('PeriodCalendar DEBUG: only 1 start -> using defaults cycle=$avgCycle, period=$avgPeriod');
+    DateTime base = lastStart;
+    for (int i = 1; i <= 3; i++) {
+      base = base.add(Duration(days: avgCycle));
+      for (int d = 0; d < avgPeriod; d++) {
+        final dt = DateTime(base.year, base.month, base.day).add(Duration(days: d));
+        if (!_hasRecorded(dt)) _addEvent(dt, 'predicted');
+      }
+    }
+  }
+
+  if (mounted) setState(() {});
+}
 
   bool _hasRecorded(DateTime day) {
     final key = DateTime(day.year, day.month, day.day);
