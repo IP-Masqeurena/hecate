@@ -3,8 +3,6 @@ import 'package:hecate/pages/add_entry_page.dart';
 import 'package:hecate/pages/settings_page.dart';
 import 'package:hecate/services/firebase_service.dart';
 import 'package:provider/provider.dart';
-import '../services/auth_service.dart';
-
 import '../models/period_entry.dart';
 import '../widgets/period_calendar.dart';
 
@@ -12,7 +10,6 @@ class HomePage extends StatelessWidget {
   HomePage({super.key});
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthService>(context, listen: false);
     final fs = Provider.of<FirestoreService>(context, listen: false);
 
     return Scaffold(
@@ -22,10 +19,6 @@ class HomePage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.pushNamed(context, SettingsPage.routeName),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => auth.signOut(),
           ),
         ],
       ),
